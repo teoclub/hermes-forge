@@ -5,25 +5,29 @@ import (
 	"log"
 	"os"
 
-	"github.com/teoclub/hermes-forge/internal/client"
 	"github.com/teoclub/hermes-forge/internal/engine"
+	"github.com/teoclub/hermes-forge/internal/provider"
 
-	"github.com/teoclub/hermes-forge/internal/provider/anthropic"
+	_ "github.com/teoclub/hermes-forge/internal/provider/anthropic"
+	_ "github.com/teoclub/hermes-forge/internal/provider/ollama"
+	_ "github.com/teoclub/hermes-forge/internal/provider/openai"
 	"github.com/teoclub/hermes-forge/internal/tools"
 )
 
 func main() {
-	if os.Getenv("ANTHROPIC_API_KEY") == "" {
-		log.Fatal("请先导出 ANTHROPIC_API_KEY 环境变量")
-	}
-
 	workDir, _ := os.Getwd()
 
-	llmProvider, err := anthropic.NewAnthropicProvider(
-		client.WithModel("claude-3-5-sonnet-latest"),
-	)
+	providerName := getenv("HF_PROVIDER", "anthropic")
+	modelName := os.Getenv("HF_MODEL")
+
+	opts := make([]provider.Option, 0, 1)
+	if modelName != "" {
+		opts = append(opts, provider.WithModel(modelName))
+	}
+
+	llmProvider, err := provider.New(providerName, opts...)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("初始化 provider 失败: %v (available=%v)", err, provider.Registered())
 	}
 	registry := tools.NewRegistry()
 
@@ -43,4 +47,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("引擎运行崩溃: %v", err)
 	}
+}
+
+func getenv(key, fallback string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return v
 }

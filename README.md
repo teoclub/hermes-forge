@@ -10,10 +10,9 @@ a tiny AI Agent operating system built from scratch in Go.
 - 状态外部化: 可将记忆与计划持久化到外部文档与文件系统。
 
 ## 当前基础架构
-- `cmd/hf`: 进程入口，负责解析输入并启动应用。
-- `internal/app`: 启动层（配置加载、依赖装配、内置工具注册）。
+- `cmd/hf`: 进程入口，负责组装 provider、工具与主循环。
 - `internal/engine`: Agent 主循环（最小 ReAct 流程）。
-- `internal/provider`: 模型提供者抽象（当前内置 `MockProvider`）。
+- `internal/provider`: 模型提供者抽象、provider registry 与通用模型配置项。
 - `internal/tools`: 线程安全工具注册中心（注册、执行、枚举）。
 - `internal/schema`: Provider / Engine 共享协议结构（消息与工具调用）。
 
@@ -24,7 +23,10 @@ go run ./cmd/hf "tool:upper hello world"
 ```
 
 环境变量:
-- `HF_MAX_STEPS`: Agent 循环最大步数（默认 `8`）
+- `HF_PROVIDER`: provider 名称（`anthropic`/`openai`/`ollama`，默认 `anthropic`）
+- `HF_MODEL`: 可选，覆盖默认模型
+- `ANTHROPIC_API_KEY`: 使用 anthropic provider 时必需
+- `OPENAI_API_KEY`: 使用 openai provider 时必需
 
 ## 测试
 ```bash
@@ -32,6 +34,6 @@ go test ./...
 ```
 
 ## 下一步建议
-- 接入真实 Provider（Claude/GLM/OpenAI）并在 `internal/provider` 下实现多后端。
+- 完成 provider 的 Generate/Stream 真实实现（当前为占位错误返回）。
 - 在 `internal/tools` 增加超时、并发限流、审计日志。
 - 引入 `plan memory` 与 `task memory` 的持久化模块。

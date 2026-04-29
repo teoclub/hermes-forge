@@ -1,13 +1,26 @@
-package client
+package provider
 
 type Option func(*Config)
 
 type Config struct {
+	APIKey      string  `json:"api_key"`
 	BaseURL     string  `json:"base_url"`
 	Model       string  `json:"model"`
 	Temperature float64 `json:"temperature"`
 
 	MaxTokens int `json:"max_tokens"`
+}
+
+const defaultTemperature = 0.7
+
+func NewConfig(opts ...Option) Config {
+	cfg := Config{
+		Temperature: defaultTemperature,
+	}
+
+	Apply(&cfg, opts...)
+
+	return cfg
 }
 
 func Apply(cfg *Config, opts ...Option) {
@@ -21,6 +34,12 @@ func Apply(cfg *Config, opts ...Option) {
 func (c *Config) Clone() *Config {
 	clone := *c
 	return &clone
+}
+
+func WithAPIKey(apiKey string) Option {
+	return func(cfg *Config) {
+		cfg.APIKey = apiKey
+	}
 }
 
 func WithModel(model string) Option {
