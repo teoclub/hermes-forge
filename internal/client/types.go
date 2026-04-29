@@ -1,0 +1,48 @@
+package client
+
+type Option func(*Config)
+
+type Config struct {
+	BaseURL     string  `json:"base_url"`
+	Model       string  `json:"model"`
+	Temperature float64 `json:"temperature"`
+
+	MaxTokens int `json:"max_tokens"`
+}
+
+func Apply(cfg *Config, opts ...Option) {
+	for _, opt := range opts {
+		if opt != nil {
+			opt(cfg)
+		}
+	}
+}
+
+func (c *Config) Clone() *Config {
+	clone := *c
+	return &clone
+}
+
+func WithModel(model string) Option {
+	return func(cfg *Config) {
+		cfg.Model = model
+	}
+}
+
+func WithBaseURL(baseURL string) Option {
+	return func(cfg *Config) {
+		cfg.BaseURL = baseURL
+	}
+}
+
+func WithTemperature(temperature float64) Option {
+	return func(cfg *Config) {
+		cfg.Temperature = temperature
+	}
+}
+
+func WithMaxTokens(maxTokens int) Option {
+	return func(cfg *Config) {
+		cfg.MaxTokens = maxTokens
+	}
+}
