@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// Role represents the speaker for a given message.
 type Role string
 
 const (
@@ -14,12 +15,12 @@ const (
 	RoleTool      Role = "tool"
 )
 
-// ContentPart represents a part of the message content.
+// ContentPart is implemented by any structure that can be included inside a message.
 type ContentPart interface {
 	Type() string
 }
 
-// Message represents one dialogue turn in the agent context.
+// Message represents one turn in a conversation with the provider and can mix modalities.
 type Message struct {
 	Role       Role          `json:"role"`
 	Content    []ContentPart `json:"content"`
@@ -86,8 +87,8 @@ func (t TextContent) Type() string {
 	return "text"
 }
 
-func Text(text string) TextContent {
-	return TextContent{Text: text}
+func Text(s string) *TextContent {
+	return &TextContent{Text: s}
 }
 
 func MessageText(parts []ContentPart) string {
@@ -98,12 +99,81 @@ func MessageText(parts []ContentPart) string {
 	var b strings.Builder
 	first := true
 	for _, p := range parts {
-		if t, ok := p.(TextContent); ok {
+		if t, ok := p.(*TextContent); ok {
 			if !first {
 				b.WriteString("\n")
 			}
 			b.WriteString(t.Text)
 			first = false
+		}
+	}
+	return b.String()
+}
+
+// ReasoningContent represents model-internal reasoning or thinking text when providers expose it.
+type ReasoningContent struct {
+	Text string
+}
+
+// Type identifies the piece as reasoning.
+func (r *ReasoningContent) Type() string { return "reasoning" }
+
+// Reasoning is a helper constructor for a reasoning part.
+func Reasoning(s string) *ReasoningContent { return &ReasoningContent{Text: s} }
+
+// ImageContent represents a reference to an image by URL or base64 payload.
+type ImageContent struct {
+	URL    string
+	Detail string // optional granularity instruction used by some providers
+}
+
+// Type identifies the piece as an image.
+func (i *ImageContent) Type() string { return "image" }
+
+// Image is a helper constructor for an image part.
+func Image(url string) *ImageContent { return &ImageContent{URL: url} }
+
+// UsageMetadata captures token consumption and cost information reported by providers.
+type UsageMetadata struct {
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Cost             float64 // Estimated cost in US dollars based on configured per-million-token rates.
+}
+
+// Response contains the normalized result returned from a provider.
+type Response struct {
+	ID           string
+	Model        string
+	Message      Message
+	Usage        UsageMetadata
+	FinishReason string
+	Raw          any
+}
+
+// Text concatenates the textual segments of the response for the common use case where only text matters.
+func (r *Response) Text() string {
+	if r == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range r.Message.Content {
+		if tc, ok := part.(*TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+// ReasoningText concatenates reasoning segments exposed by providers.
+func (r *Response) ReasoningText() string {
+	if r == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range r.Message.Content {
+		if rc, ok := part.(*ReasoningContent); ok {
+			b.WriteString(rc.Text)
 		}
 	}
 	return b.String()

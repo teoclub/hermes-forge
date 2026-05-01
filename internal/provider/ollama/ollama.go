@@ -13,6 +13,10 @@ type OllamaProvider struct {
 	cfg provider.Config
 }
 
+func (o *OllamaProvider) Name() string {
+	return "ollama"
+}
+
 func NewOllamaProvider(opts ...provider.Option) (*OllamaProvider, error) {
 	cfg := provider.NewConfig(opts...)
 	return &OllamaProvider{
@@ -20,7 +24,7 @@ func NewOllamaProvider(opts ...provider.Option) (*OllamaProvider, error) {
 	}, nil
 }
 
-func (o *OllamaProvider) Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (*schema.Message, error) {
+func (o *OllamaProvider) Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (*schema.Response, error) {
 	return nil, provider.WrapError("ollama", "generate", provider.ErrNotImplemented)
 }
 

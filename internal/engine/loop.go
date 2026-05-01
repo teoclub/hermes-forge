@@ -14,21 +14,21 @@ import (
 type AgentEngine struct {
 	provider       provider.LLMProvider
 	registry       tools.Registry
-	WorkDir        string
-	EnableThinking bool
+	workDir        string
+	enableThinking bool
 }
 
 func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, enableThinking bool) *AgentEngine {
 	return &AgentEngine{
 		provider:       p,
 		registry:       r,
-		WorkDir:        workDir,
-		EnableThinking: enableThinking,
+		workDir:        workDir,
+		enableThinking: enableThinking,
 	}
 }
 
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
-	log.Printf("[Engine] 引擎启动，锁定工作区: %s\n", e.WorkDir)
+	log.Printf("[Engine] 引擎启动，锁定工作区: %s\n", e.workDir)
 
 	contextHistory := []schema.Message{
 		{Role: schema.RoleSystem, Content: []schema.ContentPart{schema.Text("You are go-tiny-claw, an expert coding assistant.")}},
@@ -38,7 +38,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 	for {
 		availableTools := e.registry.GetAvailableTools()
 
-		if e.EnableThinking {
+		if e.enableThinking {
 			if reporter != nil {
 				reporter.OnThinking(ctx)
 			}
@@ -47,8 +47,8 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 			if err != nil {
 				return fmt.Errorf("Thinking 阶段失败: %w", err)
 			}
-			if schema.MessageText(thinkResp.Content) != "" {
-				contextHistory = append(contextHistory, *thinkResp)
+			if schema.MessageText(thinkResp.Message.Content) != "" {
+				contextHistory = append(contextHistory, thinkResp.Message)
 			}
 		}
 
@@ -57,23 +57,23 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 			return fmt.Errorf("Action 阶段失败: %w", err)
 		}
 
-		contextHistory = append(contextHistory, *actionResp)
+		contextHistory = append(contextHistory, actionResp.Message)
 
 		if reporter != nil {
-			content := schema.MessageText(actionResp.Content)
+			content := schema.MessageText(actionResp.Message.Content)
 			if content != "" {
 				reporter.OnMessage(ctx, content)
 			}
 		}
 
-		if len(actionResp.ToolCalls) == 0 {
+		if len(actionResp.Message.ToolCalls) == 0 {
 			break
 		}
 
-		observationMsgs := make([]schema.Message, len(actionResp.ToolCalls))
+		observationMsgs := make([]schema.Message, len(actionResp.Message.ToolCalls))
 		var wg sync.WaitGroup
 
-		for i, toolCall := range actionResp.ToolCalls {
+		for i, toolCall := range actionResp.Message.ToolCalls {
 			wg.Add(1)
 
 			go func(idx int, call schema.ToolCall) {

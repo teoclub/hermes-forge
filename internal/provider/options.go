@@ -3,11 +3,15 @@ package provider
 type Option func(*Config)
 
 type Config struct {
-	APIKey      string  `json:"api_key"`
-	BaseURL     string  `json:"base_url"`
-	Model       string  `json:"model"`
+	// API密钥
+	APIKey string `json:"api_key"`
+	// 基础URL
+	BaseURL string `json:"base_url"`
+	// 模型名字
+	Model string `json:"model"`
+	// 温度
 	Temperature float64 `json:"temperature"`
-
+	// 最大标记数
 	MaxTokens int `json:"max_tokens"`
 }
 
@@ -31,9 +35,9 @@ func Apply(cfg *Config, opts ...Option) {
 	}
 }
 
-func (c *Config) Clone() *Config {
+func (c *Config) Clone() Config {
 	clone := *c
-	return &clone
+	return clone
 }
 
 func WithAPIKey(apiKey string) Option {

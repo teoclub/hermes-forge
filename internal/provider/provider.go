@@ -8,6 +8,7 @@ import (
 
 // LLMProvider defines the normalized model backend contract.
 type LLMProvider interface {
-	Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...Option) (*schema.Message, error)
+	Name() string
+	Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...Option) (*schema.Response, error)
 	Stream(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...Option) (<-chan *schema.StreamChunk, error)
 }
