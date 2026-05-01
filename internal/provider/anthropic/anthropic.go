@@ -13,9 +13,19 @@ import (
 
 var _ provider.LLMProvider = (*AnthropicProvider)(nil)
 
+const providerName = "anthropic"
+
 type AnthropicProvider struct {
 	client anthropic.Client
 	cfg    provider.Config
+}
+
+func init() {
+	provider.MustRegisterProvider(providerName, New)
+}
+
+func New(opts ...provider.Option) (provider.LLMProvider, error) {
+	return NewAnthropicProvider(opts...)
 }
 
 func NewAnthropicProvider(opts ...provider.Option) (*AnthropicProvider, error) {
@@ -27,7 +37,7 @@ func NewAnthropicProvider(opts ...provider.Option) (*AnthropicProvider, error) {
 }
 
 func (a *AnthropicProvider) Name() string {
-	return "anthropic"
+	return providerName
 }
 
 func (a *AnthropicProvider) Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (*schema.Response, error) {
@@ -35,7 +45,7 @@ func (a *AnthropicProvider) Generate(ctx context.Context, prompt []schema.Messag
 
 	resp, err := a.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, provider.WrapError("anthropic", "generate", fmt.Errorf("request failed: %w", err))
+		return nil, provider.WrapError(providerName, "generate", fmt.Errorf("request failed: %w", err))
 	}
 
 	resultMsg := schema.Message{
@@ -76,7 +86,7 @@ func (a *AnthropicProvider) Generate(ctx context.Context, prompt []schema.Messag
 func (a *AnthropicProvider) Stream(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (<-chan *schema.StreamChunk, error) {
 	stream := a.client.Messages.NewStreaming(ctx, a.buildMessageParams(prompt, availableTools, opts...))
 	if err := stream.Err(); err != nil {
-		return nil, provider.WrapError("anthropic", "stream", fmt.Errorf("request failed: %w", err))
+		return nil, provider.WrapError(providerName, "stream", fmt.Errorf("request failed: %w", err))
 	}
 
 	ch := make(chan *schema.StreamChunk)
@@ -113,7 +123,7 @@ func (a *AnthropicProvider) Stream(ctx context.Context, prompt []schema.Message,
 
 		if err := stream.Err(); err != nil {
 			sendStreamChunk(ctx, ch, &schema.StreamChunk{
-				Err:  provider.WrapError("anthropic", "stream", err),
+				Err:  provider.WrapError(providerName, "stream", err),
 				Done: true,
 			})
 		}

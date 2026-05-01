@@ -1,44 +1,91 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
+	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
 	"github.com/teoclub/hermes-forge/internal/engine"
+	"github.com/teoclub/hermes-forge/internal/plugin/feishu"
 	"github.com/teoclub/hermes-forge/internal/provider"
 	"github.com/teoclub/hermes-forge/internal/tools"
+
+	_ "github.com/teoclub/hermes-forge/internal/provider/anthropic"
+	_ "github.com/teoclub/hermes-forge/internal/provider/openai"
 )
 
 func main() {
 	workDir, _ := os.Getwd()
-	providerName := os.Getenv("HF_PROVIDER")
 	modelName := os.Getenv("HF_MODEL")
+	if modelName == "" {
+		log.Fatal("请先导出 HF_MODEL 环境变量")
+	}
 	apiKey := os.Getenv("HF_API_KEY")
-
+	if apiKey == "" {
+		log.Fatal("请先导出 HF_API_KEY 环境变量")
+	}
+	baseURL := os.Getenv("HF_BASE_URL")
+	if baseURL == "" {
+		log.Fatal("请先导出 HF_BASE_URL 环境变量")
+	}
 	llmProvider, err := provider.New(
-		providerName,
+		"anthropic",
 		provider.WithAPIKey(apiKey),
+		provider.WithBaseURL(baseURL),
 		provider.WithModel(modelName),
+		provider.WithMaxTokens(128),
 	)
+
 	if err != nil {
-		log.Fatalf("初始化 provider 失败: %v (available=%v)", err, provider.Registered())
+		log.Fatalf("初始化 provider 失败: %v (available=%v)", err, provider.RegisteredProviders())
 	}
 	registry := tools.NewRegistry()
 
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
+	registry.Register(tools.NewEditFileTool(workDir))
 
 	// 开启慢思考，促使大模型一次性规划出并行的工具调用
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
 
-	prompt := `
-	我当前目录下有 a.txt, b.txt, c.txt 三个文件。(如果没有请忽略找不到的报错)
-	为了节省时间，请你同时一次性利用工具读取这三个文件，并将它们的内容综合起来告诉我。
-	`
+	bot := feishu.NewFeishuBot(eng)
+	handler := httpserverext.NewEventHandlerFunc(bot.GetEventDispatcher())
 
-	if err := eng.Run(context.Background(), prompt, nil); err != nil {
-		log.Fatalf("执行失败: %v", err)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintln(w, "ok")
+	})
+	mux.HandleFunc("/webhook/event", logHTTP(handler))
+
+	port := ":48080"
+	log.Printf("Provider 已初始化: name=%s model=%s base_url=%s", llmProvider.Name(), modelName, baseURL)
+	log.Printf("🚀 hermes-forge 飞书服务端已启动，正在监听 %s 端口\n", port)
+
+	err = http.ListenAndServe(port, mux)
+	if err != nil {
+		log.Fatalf("服务器启动失败: %v", err)
 	}
+}
+
+func logHTTP(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next(rec, r)
+		log.Printf("[HTTP] %s %s status=%d duration=%s remote=%s", r.Method, r.URL.Path, rec.status, time.Since(start), r.RemoteAddr)
+	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }

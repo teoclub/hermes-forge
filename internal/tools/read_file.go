@@ -3,7 +3,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/teoclub/hermes-forge/internal/schema"
 )
@@ -18,26 +21,55 @@ func NewReadFileTool(workDir string) *ReadFileTool {
 	return &ReadFileTool{workDir: workDir}
 }
 
-func (r *ReadFileTool) Definition() schema.ToolDefinition {
-	slog.Info("Initializing ReadFileTool")
+func (t *ReadFileTool) Name() string {
+	return "read_file"
+}
+
+func (t *ReadFileTool) Definition() schema.ToolDefinition {
 	return schema.ToolDefinition{
-		Name:        r.Name(),
-		Description: "读取文件内容",
-		InputSchema: map[string]any{
-			"file_path": map[string]any{
-				"type":        "string",
-				"description": "The path to the file to read.",
-				"required":    true,
+		Name:        t.Name(),
+		Description: "读取指定路径的文件内容。请提供相对工作区的路径。",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "要读取的文件路径，如 cmd/claw/main.go",
+				},
 			},
+			"required": []string{"path"},
 		},
 	}
 }
 
-func (r *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
-	slog.Info("Executing ReadFileTool")
-	return "", nil
+type readFileArgs struct {
+	Path string `json:"path"`
 }
 
-func (r *ReadFileTool) Name() string {
-	return "read_file"
+func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	var input readFileArgs
+	if err := json.Unmarshal(args, &input); err != nil {
+		return "", fmt.Errorf("参数解析失败: %w", err)
+	}
+
+	fullPath := filepath.Join(t.workDir, input.Path)
+
+	file, err := os.Open(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("读取文件内容失败: %w", err)
+	}
+
+	const maxLen = 8000
+	if len(content) > maxLen {
+		truncatedMsg := fmt.Sprintf("%s\n\n...[由于内容过长，已被系统截断至前 %d 字节]...", string(content[:maxLen]), maxLen)
+		return truncatedMsg, nil
+	}
+
+	return string(content), nil
 }

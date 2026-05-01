@@ -2,53 +2,160 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+
+	lark "github.com/larksuite/oapi-sdk-go/v3"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/teoclub/hermes-forge/internal/engine"
-	"github.com/teoclub/hermes-forge/internal/plugin"
 )
 
 var _ engine.Reporter = (*FeishuReporter)(nil)
-var _ plugin.Plugin = (*FeishuBot)(nil)
 
 type FeishuBot struct {
-	engine *engine.AgentEngine
+	client    *lark.Client
+	appID     string
+	appSecret string
+	engine    *engine.AgentEngine
 }
 
-// Name implements [plugin.Plugin].
-func (f *FeishuBot) Name() string {
-	panic("unimplemented")
-}
+func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
+	appID := os.Getenv("FEISHU_APP_ID")
+	appSecret := os.Getenv("FEISHU_APP_SECRET")
 
-// Start implements [plugin.Plugin].
-func (f *FeishuBot) Start(ctx context.Context, eng *engine.AgentEngine) error {
-	panic("unimplemented")
-}
+	if appID == "" || appSecret == "" {
+		log.Fatal("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+	}
 
-func NewFeishuBot(engine *engine.AgentEngine) *FeishuBot {
+	client := lark.NewClient(appID, appSecret)
+
 	return &FeishuBot{
-		engine: engine,
+		client:    client,
+		appID:     appID,
+		appSecret: appSecret,
+		engine:    eng,
+	}
+}
+
+func (b *FeishuBot) GetEventDispatcher() *dispatcher.EventDispatcher {
+	encryptKey := os.Getenv("FEISHU_ENCRYPT_KEY")
+	verifyToken := os.Getenv("FEISHU_VERIFY_TOKEN")
+
+	handler := dispatcher.NewEventDispatcher(verifyToken, encryptKey).
+		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
+			contentStr, err := extractTextContent(event)
+			if err != nil {
+				log.Printf("[Feishu] 消息解析失败: %v", err)
+				return nil
+			}
+
+			chatId := *event.Event.Message.ChatId
+			log.Printf("[Feishu] 收到会话 %s 消息: %s\n", chatId, contentStr)
+
+			go b.handleAgentRun(chatId, contentStr)
+
+			return nil
+		}).
+		OnP2MessageReadV1(func(ctx context.Context, event *larkim.P2MessageReadV1) error {
+			// 消息已读事件，静默忽略
+			return nil
+		})
+
+	return handler
+}
+
+func (b *FeishuBot) handleAgentRun(chatId string, prompt string) {
+	reporter := &FeishuReporter{
+		client: b.client,
+		chatId: chatId,
+	}
+
+	err := b.engine.Run(context.Background(), prompt, reporter)
+	if err != nil {
+		reporter.sendMsg(fmt.Sprintf("❌ Agent 运行崩溃: %v", err))
 	}
 }
 
 type FeishuReporter struct {
+	client *lark.Client
+	chatId string
 }
 
-// OnMessage implements [engine.Reporter].
-func (f *FeishuReporter) OnMessage(ctx context.Context, content string) {
-	panic("unimplemented")
+func (r *FeishuReporter) sendMsg(text string) {
+	// Build text message content
+	textContent := map[string]string{
+		"text": text,
+	}
+	contentBytes, _ := json.Marshal(textContent)
+	contentStr := string(contentBytes)
+
+	msgReq := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(larkim.ReceiveIdTypeChatId).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(r.chatId).
+			MsgType(larkim.MsgTypeText).
+			Content(contentStr).
+			Build()).
+		Build()
+
+	resp, err := r.client.Im.Message.Create(context.Background(), msgReq)
+	if err != nil {
+		log.Printf("[Feishu] 发送消息失败: %v", err)
+		return
+	}
+	if !resp.Success() {
+		log.Printf("[Feishu] 发送消息失败: code=%d msg=%s", resp.Code, resp.Msg)
+	}
 }
 
-// OnThinking implements [engine.Reporter].
-func (f *FeishuReporter) OnThinking(ctx context.Context) {
-	panic("unimplemented")
+func (r *FeishuReporter) OnThinking(ctx context.Context) {
+	r.sendMsg("🤔 模型正在慢思考 (Thinking)...")
 }
 
-// OnToolCall implements [engine.Reporter].
-func (f *FeishuReporter) OnToolCall(ctx context.Context, toolName string, args string) {
-	panic("unimplemented")
+func (r *FeishuReporter) OnToolCall(ctx context.Context, toolName string, args string) {
+	r.sendMsg(fmt.Sprintf("🛠️ **正在执行工具**：`%s`\n参数：`%s`", toolName, args))
 }
 
-// OnToolResult implements [engine.Reporter].
-func (f *FeishuReporter) OnToolResult(ctx context.Context, toolName string, result string, isError bool) {
-	panic("unimplemented")
+func (r *FeishuReporter) OnToolResult(ctx context.Context, toolName string, result string, isError bool) {
+	if isError {
+		r.sendMsg(fmt.Sprintf("⚠️ **执行报错** (%s)：\n%s", toolName, result))
+	} else {
+		r.sendMsg(fmt.Sprintf("✅ **执行成功** (%s)", toolName))
+	}
+}
+
+func (r *FeishuReporter) OnMessage(ctx context.Context, content string) {
+	r.sendMsg(content)
+}
+
+func extractTextContent(event *larkim.P2MessageReceiveV1) (string, error) {
+	if event == nil || event.Event == nil || event.Event.Message == nil {
+		return "", fmt.Errorf("空事件")
+	}
+	if event.Event.Message.ChatId == nil || *event.Event.Message.ChatId == "" {
+		return "", fmt.Errorf("缺少 chat_id")
+	}
+	if event.Event.Message.Content == nil {
+		return "", fmt.Errorf("缺少 message.content")
+	}
+
+	var payload struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(*event.Event.Message.Content), &payload); err == nil && payload.Text != "" {
+		return payload.Text, nil
+	}
+
+	contentStr := *event.Event.Message.Content
+	contentStr = strings.TrimPrefix(contentStr, `{"text":"`)
+	contentStr = strings.TrimSuffix(contentStr, `"}`)
+	if contentStr == "" {
+		return "", fmt.Errorf("文本内容为空")
+	}
+	return contentStr, nil
 }

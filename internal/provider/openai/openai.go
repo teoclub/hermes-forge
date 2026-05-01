@@ -15,13 +15,19 @@ import (
 
 var _ provider.LLMProvider = (*OpenAIProvider)(nil)
 
+const providerName = "openai"
+
 type OpenAIProvider struct {
 	client openai.Client
 	cfg    provider.Config
 }
 
-func (o *OpenAIProvider) Name() string {
-	return "openai"
+func init() {
+	provider.MustRegisterProvider(providerName, New)
+}
+
+func New(opts ...provider.Option) (provider.LLMProvider, error) {
+	return NewOpenAIProvider(opts...)
 }
 
 func NewOpenAIProvider(opts ...provider.Option) (*OpenAIProvider, error) {
@@ -30,6 +36,10 @@ func NewOpenAIProvider(opts ...provider.Option) (*OpenAIProvider, error) {
 		client: openai.NewClient(option.WithAPIKey(cfg.APIKey), option.WithBaseURL(cfg.BaseURL)),
 		cfg:    cfg,
 	}, nil
+}
+
+func (o *OpenAIProvider) Name() string {
+	return providerName
 }
 
 func (o *OpenAIProvider) Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (*schema.Response, error) {
@@ -48,10 +58,10 @@ func (o *OpenAIProvider) Generate(ctx context.Context, prompt []schema.Message, 
 
 	resp, err := o.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, provider.WrapError("openai", "generate", fmt.Errorf("request failed: %w", err))
+		return nil, provider.WrapError(providerName, "generate", fmt.Errorf("request failed: %w", err))
 	}
 	if len(resp.Choices) == 0 {
-		return nil, provider.WrapError("openai", "generate", fmt.Errorf("empty choices"))
+		return nil, provider.WrapError(providerName, "generate", fmt.Errorf("empty choices"))
 	}
 
 	choice := resp.Choices[0]
@@ -89,7 +99,7 @@ func (o *OpenAIProvider) Generate(ctx context.Context, prompt []schema.Message, 
 }
 
 func (o *OpenAIProvider) Stream(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (<-chan *schema.StreamChunk, error) {
-	return nil, provider.WrapError("openai", "stream", provider.ErrNotImplemented)
+	return nil, provider.WrapError(providerName, "stream", provider.ErrNotImplemented)
 }
 
 func (o *OpenAIProvider) mergeConfig(opts ...provider.Option) provider.Config {

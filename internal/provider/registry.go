@@ -12,7 +12,7 @@ var (
 	providerRegistry = map[string]ProviderFactory{}
 )
 
-func Register(name string, factory ProviderFactory) error {
+func RegisterProvider(name string, factory ProviderFactory) error {
 	if name == "" {
 		return fmt.Errorf("%w: empty name", ErrInvalidInput)
 	}
@@ -29,8 +29,8 @@ func Register(name string, factory ProviderFactory) error {
 	return nil
 }
 
-func MustRegister(name string, factory ProviderFactory) {
-	if err := Register(name, factory); err != nil {
+func MustRegisterProvider(name string, factory ProviderFactory) {
+	if err := RegisterProvider(name, factory); err != nil {
 		panic(err)
 	}
 }
@@ -68,7 +68,7 @@ func MustNew(providerName string, opts ...Option) LLMProvider {
 	return client
 }
 
-func Registered() []string {
+func RegisteredProviders() []string {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	names := make([]string, 0, len(providerRegistry))

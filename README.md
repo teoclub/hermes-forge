@@ -1,8 +1,14 @@
-# hermes-forge
+# HermesForge
 
-a tiny AI Agent operating system built from scratch in Go.
+HermesForge is a tiny AI Agent harness written from scratch in Go.
 
-这是一个基于“驾驭工程 (Harness Engineering)”理念，由 Go 语言从零实现的微型 AI Agent 操作系统。
+It provides:
+
+- A minimal Agent Loop engine
+- Unified LLM provider abstraction
+- Built-in local tools such as bash and file operations
+- Plugin adapters for Feishu and Weixin bots
+- A simple CLI entrypoint through `hforge`
 
 ## 核心设计哲学
 - Harness over Framework: 真正的壁垒不在于调用大模型 API，而在于如何调度工具、管理上下文和安全拦截。
@@ -18,22 +24,96 @@ a tiny AI Agent operating system built from scratch in Go.
 
 ## 快速开始
 ```bash
-go run ./cmd/hf "hello"
-go run ./cmd/hf "tool:upper hello world"
+go run ./cmd/hforge
 ```
 
 环境变量:
 - `HF_PROVIDER`: provider 名称（`anthropic`/`openai`/`ollama`，默认 `anthropic`）
 - `HF_MODEL`: 可选，覆盖默认模型
-- `ANTHROPIC_API_KEY`: 使用 anthropic provider 时必需
-- `OPENAI_API_KEY`: 使用 openai provider 时必需
+- `HF_API_KEY`: API key；优先级高于 provider 专用 key
+- `HF_BASE_URL`: 可选，自定义兼容 API 地址
+- `ANTHROPIC_API_KEY`: 使用 anthropic provider 时可作为 `HF_API_KEY` 的 fallback
+- `OPENAI_API_KEY`: 使用 openai provider 时可作为 `HF_API_KEY` 的 fallback
+
+MiniMax Anthropic-compatible API 示例:
+
+```bash
+# 飞书
+export HF_PROVIDER=anthropic
+export HF_BASE_URL=https://api.minimaxi.com/anthropic
+export HF_MODEL=MiniMax-M2.7
+export HF_API_KEY=''
+export FEISHU_APP_ID=
+export FEISHU_APP_SECRET=
+go run ./cmd/hforge
+
+# 模型
+export HF_PROVIDER=anthropic
+export HF_BASE_URL=https://api.minimaxi.com/anthropic
+export HF_MODEL=MiniMax-M2.7
+export HF_API_KEY=''
+go run ./cmd/smoke
+```
+
+## Provider 使用方式
+
+### 通过 registry 使用
+
+Provider 包通过 `init` 注册自己。入口程序只需要 blank import 对应 provider 包，然后用统一的 registry 创建实例:
+
+```go
+import (
+	"github.com/teoclub/hermes-forge/internal/provider"
+
+	_ "github.com/teoclub/hermes-forge/internal/provider/anthropic"
+)
+
+llmProvider, err := provider.New(
+	"anthropic",
+	provider.WithAPIKey(apiKey),
+	provider.WithModel(modelName),
+)
+if err != nil {
+	return err
+}
+```
+
+`anthropic` provider 内部的注册代码:
+
+```go
+func init() {
+	provider.MustRegisterProvider(providerName, New)
+}
+
+func New(opts ...provider.Option) (provider.LLMProvider, error) {
+	return NewAnthropicProvider(opts...)
+}
+```
+
+这种方式适合 `main.go` 这类需要按配置切换 provider 的入口。
+
+### 直接使用具体 provider
+
+如果代码已经确定只使用 Anthropic，也可以直接调用具体构造函数:
+
+```go
+import (
+	"github.com/teoclub/hermes-forge/internal/provider"
+	"github.com/teoclub/hermes-forge/internal/provider/anthropic"
+)
+
+llmProvider, err := anthropic.NewAnthropicProvider(
+	provider.WithAPIKey(apiKey),
+	provider.WithModel(modelName),
+)
+if err != nil {
+	return err
+}
+```
+
+注意 `NewAnthropicProvider` 在 `anthropic` 包里，不是 `provider.NewAnthropicProvider`。
 
 ## 测试
 ```bash
 go test ./...
 ```
-
-## 下一步建议
-- 完成 provider 的 Generate/Stream 真实实现（当前为占位错误返回）。
-- 在 `internal/tools` 增加超时、并发限流、审计日志。
-- 引入 `plan memory` 与 `task memory` 的持久化模块。

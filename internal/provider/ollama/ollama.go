@@ -9,15 +9,17 @@ import (
 
 var _ provider.LLMProvider = (*OllamaProvider)(nil)
 
+const providerName = "ollama"
+
 type OllamaProvider struct {
 	cfg provider.Config
 }
 
 func (o *OllamaProvider) Name() string {
-	return "ollama"
+	return providerName
 }
 
-func NewOllamaProvider(opts ...provider.Option) (*OllamaProvider, error) {
+func New(opts ...provider.Option) (*OllamaProvider, error) {
 	cfg := provider.NewConfig(opts...)
 	return &OllamaProvider{
 		cfg: cfg,
@@ -25,9 +27,9 @@ func NewOllamaProvider(opts ...provider.Option) (*OllamaProvider, error) {
 }
 
 func (o *OllamaProvider) Generate(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (*schema.Response, error) {
-	return nil, provider.WrapError("ollama", "generate", provider.ErrNotImplemented)
+	return nil, provider.WrapError(providerName, "generate", provider.ErrNotImplemented)
 }
 
 func (o *OllamaProvider) Stream(ctx context.Context, prompt []schema.Message, availableTools []schema.ToolDefinition, opts ...provider.Option) (<-chan *schema.StreamChunk, error) {
-	return nil, provider.WrapError("ollama", "stream", provider.ErrNotImplemented)
+	return nil, provider.WrapError(providerName, "stream", provider.ErrNotImplemented)
 }
