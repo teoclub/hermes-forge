@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -15,6 +15,7 @@ import (
 	// larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 
 	"github.com/teoclub/hermes-forge/internal/engine"
+	"github.com/teoclub/hermes-forge/logger"
 )
 
 var _ engine.Reporter = (*FeishuReporter)(nil)
@@ -31,7 +32,8 @@ func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
 	appSecret := os.Getenv("FEISHU_APP_SECRET")
 
 	if appID == "" || appSecret == "" {
-		log.Fatal("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+		logger.Log(context.Background(), logger.LevelFatal, "missing feishu credentials", "env", "FEISHU_APP_ID/FEISHU_APP_SECRET")
+		os.Exit(1)
 	}
 
 	client := lark.NewClient(appID, appSecret)
@@ -52,12 +54,13 @@ func (b *FeishuBot) GetEventDispatcher() *dispatcher.EventDispatcher {
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			contentStr, err := extractTextContent(event)
 			if err != nil {
-				log.Printf("[Feishu] 消息解析失败: %v", err)
+				logger.WarnContext(ctx, "feishu message parse failed", "err", err)
 				return nil
 			}
 
 			chatId := *event.Event.Message.ChatId
-			log.Printf("[Feishu] 收到会话 %s 消息: %s\n", chatId, contentStr)
+			ctx = logger.ContextWithAttrs(ctx, slog.String("chat_id", chatId))
+			logger.InfoContext(ctx, "feishu message received", "content", contentStr)
 
 			go b.handleAgentRun(chatId, contentStr)
 
@@ -72,13 +75,15 @@ func (b *FeishuBot) GetEventDispatcher() *dispatcher.EventDispatcher {
 }
 
 func (b *FeishuBot) handleAgentRun(chatId string, prompt string) {
+	ctx := logger.ContextWithAttrs(context.Background(), slog.String("chat_id", chatId))
 	reporter := &FeishuReporter{
 		client: b.client,
 		chatId: chatId,
 	}
 
-	err := b.engine.Run(context.Background(), prompt, reporter)
+	err := b.engine.Run(ctx, prompt, reporter)
 	if err != nil {
+		logger.ErrorContext(ctx, "agent run failed", "err", err)
 		reporter.sendMsg(fmt.Sprintf("❌ Agent 运行崩溃: %v", err))
 	}
 }
@@ -107,11 +112,13 @@ func (r *FeishuReporter) sendMsg(text string) {
 
 	resp, err := r.client.Im.Message.Create(context.Background(), msgReq)
 	if err != nil {
-		log.Printf("[Feishu] 发送消息失败: %v", err)
+		ctx := logger.ContextWithAttrs(context.Background(), slog.String("chat_id", r.chatId))
+		logger.ErrorContext(ctx, "feishu message send failed", "err", err)
 		return
 	}
 	if !resp.Success() {
-		log.Printf("[Feishu] 发送消息失败: code=%d msg=%s", resp.Code, resp.Msg)
+		ctx := logger.ContextWithAttrs(context.Background(), slog.String("chat_id", r.chatId))
+		logger.ErrorContext(ctx, "feishu message send failed", "code", resp.Code, "msg", resp.Msg)
 	}
 }
 

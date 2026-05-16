@@ -3,12 +3,12 @@ package engine
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/teoclub/hermes-forge/internal/provider"
 	"github.com/teoclub/hermes-forge/internal/schema"
 	"github.com/teoclub/hermes-forge/internal/tools"
+	"github.com/teoclub/hermes-forge/logger"
 )
 
 type AgentEngine struct {
@@ -28,8 +28,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 }
 
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
-	log.Printf("[Engine] 引擎启动，锁定工作区: %s\n", e.workDir)
-	log.Printf("[Engine] 慢思考模式 (Thinking Phase): %v\n", e.enableThinking)
+	logger.InfoContext(ctx, "engine started", "work_dir", e.workDir, "thinking", e.enableThinking)
 
 	contextHistory := []schema.Message{
 		{Role: schema.RoleSystem, Content: []schema.ContentPart{schema.Text("You are hermes-forge, an expert coding assistant.")}},
@@ -40,7 +39,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 
 	for {
 		turnCount++
-		log.Printf("\n========== [Turn %d] 开始 ==========\n", turnCount)
+		logger.InfoContext(ctx, "engine turn started", "turn", turnCount)
 
 		availableTools := e.registry.GetAvailableTools()
 
@@ -50,19 +49,19 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 				reporter.OnThinking(ctx)
 			}
 
-			log.Println("[Engine][Phase 1] 剥夺工具访问权，强制进入慢思考与规划阶段...")
+			logger.InfoContext(ctx, "thinking phase started", "turn", turnCount)
 			thinkResp, err := e.provider.Generate(ctx, contextHistory, nil)
 			if err != nil {
 				return fmt.Errorf("Thinking 阶段失败: %w", err)
 			}
-			if schema.MessageText(thinkResp.Message.Content) != "" {
-				fmt.Printf("🧠 [内部思考 Trace]: \n%s\n", thinkResp.Message)
+			if content := schema.MessageText(thinkResp.Message.Content); content != "" {
+				logger.DebugContext(ctx, "thinking phase response", "turn", turnCount, "content", content)
 				contextHistory = append(contextHistory, thinkResp.Message)
 			}
 		}
 
 		// Phase 2: 行动阶段
-		log.Println("[Engine][Phase 2] 恢复工具挂载，等待模型采取行动...")
+		logger.InfoContext(ctx, "action phase started", "turn", turnCount, "tools", len(availableTools))
 		actionResp, err := e.provider.Generate(ctx, contextHistory, availableTools)
 		if err != nil {
 			return fmt.Errorf("Action 阶段失败: %w", err)
@@ -71,9 +70,9 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 		contextHistory = append(contextHistory, actionResp.Message)
 
 		if len(actionResp.Message.Content) > 0 {
-			log.Printf("🤖 [模型回复]: \n%s\n", actionResp.Message)
+			logger.InfoContext(ctx, "model responded", "turn", turnCount, "content", schema.MessageText(actionResp.Message.Content))
 		} else {
-			log.Printf("🤖 [模型回复]: (无文本内容，可能仅包含工具调用)\n")
+			logger.InfoContext(ctx, "model responded without text", "turn", turnCount, "tool_calls", len(actionResp.Message.ToolCalls))
 		}
 
 		if reporter != nil {
@@ -84,11 +83,11 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 		}
 
 		if len(actionResp.Message.ToolCalls) == 0 {
-			log.Println("[Engine] 模型未请求调用工具，任务宣告完成。")
+			logger.InfoContext(ctx, "engine completed", "turn", turnCount)
 			break
 		}
 
-		log.Printf("[Engine] 模型请求并发调用 %d 个工具...\n", len(actionResp.Message.ToolCalls))
+		logger.InfoContext(ctx, "tool calls requested", "turn", turnCount, "count", len(actionResp.Message.ToolCalls))
 
 		// 预分配切片以保证顺序并避免并发写入锁
 		observationMsgs := make([]schema.Message, len(actionResp.Message.ToolCalls))
@@ -100,7 +99,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 			go func(idx int, call schema.ToolCall) {
 				defer wg.Done()
 
-				log.Printf("  -> [Go-%d] 🛠️ 触发并行执行: %s\n", idx, call.Name)
+				logger.InfoContext(ctx, "tool call started", "turn", turnCount, "index", idx, "tool", call.Name)
 
 				if reporter != nil {
 					reporter.OnToolCall(ctx, call.Name, string(call.Arguments))
@@ -110,9 +109,9 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 				result := e.registry.Execute(ctx, call)
 
 				if result.IsError {
-					log.Printf("  -> [Go-%d] ❌ 工具执行报错: %s\n", idx, result.Output)
+					logger.ErrorContext(ctx, "tool call failed", "turn", turnCount, "index", idx, "tool", call.Name, "output", result.Output)
 				} else {
-					log.Printf("  -> [Go-%d] ✅ 工具执行成功 (返回 %d 字节)\n", idx, len(result.Output))
+					logger.InfoContext(ctx, "tool call succeeded", "turn", turnCount, "index", idx, "tool", call.Name, "output_bytes", len(result.Output))
 				}
 
 				if reporter != nil {
@@ -135,7 +134,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 		// 等待所有工具调用完成
 		wg.Wait()
 
-		log.Println("[Engine] 所有并发工具执行完毕，开始聚合观察结果 (Observation)...")
+		logger.InfoContext(ctx, "tool calls completed", "turn", turnCount, "count", len(observationMsgs))
 
 		// 按序追加回 Context
 		for _, obs := range observationMsgs {

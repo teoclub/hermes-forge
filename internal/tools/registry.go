@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/teoclub/hermes-forge/internal/schema"
+	"github.com/teoclub/hermes-forge/logger"
 )
 
 type Tool interface {
@@ -50,11 +50,11 @@ func (r *registry) Register(tool Tool) {
 
 	name := tool.Name()
 	if _, exists := r.tools[name]; exists {
-		slog.Warn("工具已被注册", "name", name)
+		logger.Warn("tool already registered", "name", name)
 	}
 	r.tools[name] = tool
 
-	slog.Info("工具挂载成功", "name", name)
+	logger.Info("tool registered", "name", name)
 }
 
 func (r *registry) Execute(ctx context.Context, call schema.ToolCall) schema.ToolResult {
