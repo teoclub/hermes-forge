@@ -125,7 +125,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 
 				// 安全写入对应索引
 				observationMsgs[idx] = schema.Message{
-					Role:       schema.RoleUser,
+					Role:       schema.RoleTool,
 					Content:    []schema.ContentPart{schema.Text(result.Output)},
 					ToolCallID: call.ID,
 				}

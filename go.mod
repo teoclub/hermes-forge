@@ -8,6 +8,11 @@ require (
 )
 
 require (
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
+)
+
+require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
