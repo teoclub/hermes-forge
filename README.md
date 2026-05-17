@@ -7,7 +7,7 @@ It provides:
 - A minimal Agent Loop engine
 - Unified LLM provider abstraction
 - Built-in local tools such as bash and file operations
-- Plugin adapters for Feishu and Weixin bots
+- Plugin adapters for Feishu, DingTalk, and WeChat bots
 - A simple CLI entrypoint through `hforge`
 
 ## 核心设计哲学
@@ -38,13 +38,24 @@ go run ./cmd/hforge
 MiniMax Anthropic-compatible API 示例:
 
 ```bash
-# 飞书
+# 飞书 webhook
 export HF_PROVIDER=anthropic
 export HF_BASE_URL=https://api.minimaxi.com/anthropic
 export HF_MODEL=MiniMax-M2.7
 export HF_API_KEY=''
 export FEISHU_APP_ID=
 export FEISHU_APP_SECRET=
+export FEISHU_CONNECTION_MODE=websocket
+go run ./cmd/hforge
+
+# 钉钉 webhook
+# endpoint: /webhook/dingtalk/event
+export DINGTALK_CLIENT_SECRET=
+go run ./cmd/hforge
+
+# 微信 iLink long-poll
+export WECHAT_BOT_TOKEN=
+export WECHAT_ILINK_BOT_ID=
 go run ./cmd/hforge
 
 # 模型
@@ -54,6 +65,20 @@ export HF_MODEL=MiniMax-M2.7
 export HF_API_KEY=''
 go run ./cmd/smoke
 ```
+
+Feishu uses WebSocket long connection by default, so it does not require a
+public webhook URL. Set `FEISHU_CONNECTION_MODE=webhook` to use HTTP callbacks.
+
+Webhook endpoints:
+
+- Feishu: `/webhook/feishu/event`
+- DingTalk: `/webhook/dingtalk/event`
+
+The DingTalk webhook is enabled only when `DINGTALK_CLIENT_SECRET` is set.
+`DINGTALK_APP_SECRET` is accepted as an alias.
+
+WeChat uses iLink long-poll and starts only when `WECHAT_BOT_TOKEN` and
+`WECHAT_ILINK_BOT_ID` are set.
 
 ## Provider 使用方式
 

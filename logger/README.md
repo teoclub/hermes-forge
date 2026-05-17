@@ -8,11 +8,11 @@ This package is built on the standard library `log/slog`. You can still use
 plain slog handlers directly.
 
 ```go
-logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+l := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 	Level: logger.LevelInfo,
 }))
 
-logger.InfoContext(ctx, "agent started",
+l.InfoContext(ctx, "agent started",
 	"provider", "anthropic",
 	"model", model,
 )
@@ -77,6 +77,11 @@ Wrapper options for `WrapHandler` and `NewLogger`:
 
 - `WithExtractor(...logger.Extractor)` adds context attr extractors.
 
+Handler options configure handlers created by this package. Wrapper options
+decorate an existing handler. This keeps `NewLogger(existingHandler, ...)` from
+pretending it can change an already-created handler's format, output writer, or
+level.
+
 ### Context attrs
 
 Attach attributes to a `context.Context` and they will flow through any
@@ -92,7 +97,7 @@ logger.InfoContext(ctx, "handling message")
 ```
 
 `logger.New`, `logger.NewHandler`, `logger.WrapHandler`, and `logger.NewLogger`
-include `logger.AttrsFromContext` by default. Add custom extractors when attrs
+attach `logger.AttrsFromContext` by default. Add custom extractors when attrs
 live somewhere else in the context.
 
 ```go

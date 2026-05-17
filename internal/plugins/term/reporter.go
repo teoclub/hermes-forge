@@ -8,19 +8,19 @@ import (
 	"github.com/teoclub/hermes-forge/internal/engine"
 )
 
-var _ engine.Reporter = (*Reporter)(nil)
+var _ engine.Reporter = (*TerminalReporter)(nil)
 
-type Reporter struct{}
+type TerminalReporter struct{}
 
-func NewReporter() *Reporter {
-	return &Reporter{}
+func NewTerminalReporter() *TerminalReporter {
+	return &TerminalReporter{}
 }
 
-func (r *Reporter) OnThinking(ctx context.Context) {
+func (r *TerminalReporter) OnThinking(ctx context.Context) {
 	fmt.Printf("\n[🤔 思考中] 模型正在推理...\n")
 }
 
-func (r *Reporter) OnToolCall(ctx context.Context, toolName string, args string) {
+func (r *TerminalReporter) OnToolCall(ctx context.Context, toolName string, args string) {
 	fmt.Printf("[🛠️ 调用工具] %s\n", toolName)
 	// 清理参数中的换行符和特殊字符
 	displayArgs := strings.ReplaceAll(args, "\n", "\\n")
@@ -31,7 +31,7 @@ func (r *Reporter) OnToolCall(ctx context.Context, toolName string, args string)
 	fmt.Printf("   参数: %s\n", displayArgs)
 }
 
-func (r *Reporter) OnToolResult(ctx context.Context, toolName string, result string, isError bool) {
+func (r *TerminalReporter) OnToolResult(ctx context.Context, toolName string, result string, isError bool) {
 	if isError {
 		fmt.Printf("[❌ 执行失败] %s\n", toolName)
 		// 显示错误信息
@@ -43,7 +43,7 @@ func (r *Reporter) OnToolResult(ctx context.Context, toolName string, result str
 	}
 }
 
-func (r *Reporter) OnMessage(ctx context.Context, content string) {
+func (r *TerminalReporter) OnMessage(ctx context.Context, content string) {
 	if content == "" {
 		return
 	}
