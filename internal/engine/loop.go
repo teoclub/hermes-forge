@@ -28,11 +28,18 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 }
 
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
+	return e.RunMessages(ctx, []schema.ContentPart{schema.Text(userPrompt)}, reporter)
+}
+
+func (e *AgentEngine) RunMessages(ctx context.Context, userParts []schema.ContentPart, reporter Reporter) error {
 	logger.InfoContext(ctx, "engine started", "work_dir", e.workDir, "thinking", e.enableThinking)
+	if len(userParts) == 0 {
+		userParts = []schema.ContentPart{schema.Text("")}
+	}
 
 	contextHistory := []schema.Message{
 		{Role: schema.RoleSystem, Content: []schema.ContentPart{schema.Text("You are hermes-forge, an expert coding assistant.")}},
-		{Role: schema.RoleUser, Content: []schema.ContentPart{schema.Text(userPrompt)}},
+		{Role: schema.RoleUser, Content: append([]schema.ContentPart(nil), userParts...)},
 	}
 
 	turnCount := 0

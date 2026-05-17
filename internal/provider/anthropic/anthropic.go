@@ -250,7 +250,9 @@ func anthropicContentBlocks(parts []schema.ContentPart) []anthropic.ContentBlock
 				blocks = append(blocks, anthropic.NewTextBlock(p.Text))
 			}
 		case *schema.ImageContent:
-			if p.URL != "" {
+			if p.Base64 != "" && p.MediaType != "" {
+				blocks = append(blocks, anthropic.NewImageBlockBase64(p.MediaType, p.Base64))
+			} else if p.URL != "" {
 				blocks = append(blocks, anthropic.NewImageBlock(anthropic.URLImageSourceParam{URL: p.URL}))
 			}
 		}

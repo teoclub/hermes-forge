@@ -123,8 +123,10 @@ func Reasoning(s string) *ReasoningContent { return &ReasoningContent{Text: s} }
 
 // ImageContent represents a reference to an image by URL or base64 payload.
 type ImageContent struct {
-	URL    string
-	Detail string // optional granularity instruction used by some providers
+	URL       string
+	Base64    string
+	MediaType string
+	Detail    string // optional granularity instruction used by some providers
 }
 
 // Type identifies the piece as an image.
@@ -132,6 +134,11 @@ func (i *ImageContent) Type() string { return "image" }
 
 // Image is a helper constructor for an image part.
 func Image(url string) *ImageContent { return &ImageContent{URL: url} }
+
+// ImageData is a helper constructor for an inline base64-encoded image.
+func ImageData(mediaType, data string) *ImageContent {
+	return &ImageContent{MediaType: mediaType, Base64: data}
+}
 
 // UsageMetadata captures token consumption and cost information reported by providers.
 type UsageMetadata struct {

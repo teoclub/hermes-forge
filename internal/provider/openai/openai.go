@@ -184,11 +184,15 @@ func openaiContentParts(parts []schema.ContentPart) []openai.ChatCompletionConte
 				})
 			}
 		case *schema.ImageContent:
-			if p.URL != "" {
+			imageURL := p.URL
+			if imageURL == "" && p.Base64 != "" && p.MediaType != "" {
+				imageURL = "data:" + p.MediaType + ";base64," + p.Base64
+			}
+			if imageURL != "" {
 				openaiParts = append(openaiParts, openai.ChatCompletionContentPartUnionParam{
 					OfImageURL: &openai.ChatCompletionContentPartImageParam{
 						ImageURL: openai.ChatCompletionContentPartImageImageURLParam{
-							URL:    p.URL,
+							URL:    imageURL,
 							Detail: p.Detail,
 						},
 					},
